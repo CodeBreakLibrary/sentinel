@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sedric Is The Best — Global Threat Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js"></script>
+<link href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<!-- Turns CelesTrak's raw orbital elements (TLE) into live lat/lon/height —
+     this is real, nontrivial math (SGP4), so we use the standard library
+     for it rather than hand-rolling it. -->
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@5/dist/satellite.min.js"></script>
+<!-- Defines window.CESIUM_TOKEN. Lives in cesium-globe-test/, same file
+     Milestone 2's test page already confirmed works. -->
+<script src="cesium-globe-test/config.local.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0a0b;
+    --bg2:#111113;
+    --bg3:#18181c;
+    --bg4:#1e1e24;
+    --border:#2a2a35;
+    --border2:#353545;
+    --red:#e63946;
+    --red2:#ff4d5e;
+    --orange:#f77f00;
+    --yellow:#fcbf49;
+    --green:#2ec4b6;
+    --blue:#4895ef;
+    --text:#e8e8ee;
+    --text2:#9999aa;
+    --text3:#666677;
+    --font:'Inter',sans-serif;
+    --mono:'Share Tech Mono',monospace;
+    --title:'Rajdhani',sans-serif;
+  }
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font);font-size:12px}
+
+  /* TICKER */
+  #ticker{position:fixed;top:0;left:0;right:0;height:32px;background:#0d0d10;border-bottom:1px solid var(--border);display:flex;align-items:center;overflow:hidden;z-index:100}
+  .ticker-label{background:var(--red);color:#fff;font-family:var(--title);font-weight:700;font-size:11px;padding:0 10px;height:100%;display:flex;align-items:center;letter-spacing:.08em;flex-shrink:0;white-space:nowrap}
+  .ticker-track{display:flex;align-items:center;white-space:nowrap;animation:ticker 55s linear infinite}
+  .ticker-item{padding:0 32px;font-size:11px;font-family:var(--mono);color:var(--text2);display:flex;align-items:center;gap:8px}
+  .ticker-item .flag{font-size:13px}
+  .ticker-item .hl{color:var(--red);font-weight:600}
+  @keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+  /* HEADER */
+  #header{position:fixed;top:32px;left:0;right:0;height:36px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:16px;z-index:99}
+  .logo{font-family:var(--title);font-weight:700;font-size:18px;letter-spacing:.12em;color:#fff;display:flex;align-items:center;gap:6px}
+  .logo-icon{width:16px;height:16px;border:2px solid var(--red);border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center}
+  .logo-icon::after{content:'';width:5px;height:5px;background:var(--red);border-radius:50%}
+  .header-stats{display:flex;gap:16px;margin-left:16px}
+  .hstat{display:flex;flex-direction:column;align-items:center;line-height:1}
+  .hstat-val{font-family:var(--title);font-size:18px;font-weight:700;color:var(--red)}
+  .hstat-lbl{font-size:9px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase}
+  .header-nav{display:flex;gap:4px;margin-left:auto}
+  .hnav{font-size:11px;padding:4px 10px;border-radius:3px;cursor:pointer;transition:.15s;border:1px solid transparent;font-family:var(--title);font-weight:600;letter-spacing:.06em;display:flex;align-items:center;gap:5px}
+  .hnav:hover{background:var(--bg4)}
+  .hnav.live{color:var(--green);border-color:#2ec4b630}
+  .live-dot{width:6px;height:6px;background:var(--green);border-radius:50%;animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+  .hnav.sub{color:var(--yellow);border-color:#fcbf4930}
+
+  /* LAYOUT */
+  #layout{position:fixed;top:68px;left:0;right:0;bottom:0;display:grid;grid-template-columns:240px 1fr 290px;overflow:hidden}
+
+  /* LEFT PANEL */
+  #left{background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+  .panel-header{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0}
+  .ph-icon{width:10px;height:10px;border:1.5px solid var(--red);border-radius:50%}
+  .ph-title{font-family:var(--title);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--text)}
+  .ph-action{margin-left:auto;cursor:pointer;color:var(--text3);font-size:10px;transition:.15s}
+  .ph-action:hover{color:var(--text)}
+
+  /* FILTERS */
+  #filters{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:4px;flex-wrap:wrap;flex-shrink:0}
+  .ftag{font-size:9px;padding:3px 7px;border-radius:2px;cursor:pointer;border:1px solid var(--border2);color:var(--text3);font-family:var(--title);font-weight:600;letter-spacing:.06em;transition:.15s;white-space:nowrap}
+  .ftag:hover,.ftag.on{border-color:var(--red);color:var(--red);background:#e6394610}
+
+  /* SEARCH */
+  #search-wrap{padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+  #search-wrap input{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:5px 8px;color:var(--text);font-size:11px;outline:none;font-family:var(--font)}
+  #search-wrap input:focus{border-color:var(--red)}
+  #search-wrap input::placeholder{color:var(--text3)}
+
+  /* SECTION HEAD */
+  .section-head{padding:6px 12px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);font-family:var(--title);font-weight:700;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:5px}
+  .hot-badge{width:6px;height:6px;background:var(--orange);border-radius:50%}
+
+  /* FEED */
+  #feed{overflow-y:auto;flex:1}
+  #feed::-webkit-scrollbar{width:3px}
+  #feed::-webkit-scrollbar-track{background:transparent}
+  #feed::-webkit-scrollbar-thumb{background:var(--border2)}
+  .feed-item{padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:.12s}
+  .feed-item:hover{background:var(--bg3)}
+  .feed-item.selected{background:var(--bg3);border-left:2px solid var(--red)}
+  .fi-top{display:flex;align-items:flex-start;gap:6px;margin-bottom:4px}
+  .fi-num{font-size:9px;color:var(--text3);font-family:var(--mono);min-width:20px}
+  .fi-title{font-size:12px;font-weight:500;line-height:1.35;flex:1;color:var(--text)}
+  .severity{font-size:9px;padding:2px 5px;border-radius:2px;font-family:var(--title);font-weight:700;letter-spacing:.05em;flex-shrink:0}
+  .sev-high{background:#e6394618;color:var(--red);border:1px solid #e6394630}
+  .sev-med{background:#f77f0018;color:var(--orange);border:1px solid #f77f0030}
+  .fi-body{font-size:11px;color:var(--text2);line-height:1.4;padding-left:26px}
+  .fi-foot{display:flex;align-items:center;gap:10px;padding-left:26px;margin-top:6px}
+  .conf-badge{font-size:9px;padding:2px 6px;background:#2ec4b618;color:var(--green);border:1px solid #2ec4b630;border-radius:2px;font-family:var(--title);font-weight:700}
+  .fi-time{font-size:9px;color:var(--text3);font-family:var(--mono)}
+  .fi-actions{display:flex;gap:8px;margin-left:auto}
+  .fi-act{font-size:9px;color:var(--text3);cursor:pointer;display:flex;align-items:center;gap:3px}
+  .fi-act:hover{color:var(--text2)}
+  .fi-flag{font-size:13px}
+
+  /* CENTER / GLOBE */
+  #center{position:relative;overflow:hidden;background:var(--bg)}
+  #cesium-globe{width:100%;height:100%}
+  #cesium-globe .cesium-widget-credits{font-size:9px;opacity:0.5} /* keep required attribution, just unobtrusive */
+  .globe-overlay{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:16px;background:#0a0a0bcc;border:1px solid var(--border);border-radius:4px;padding:6px 16px;backdrop-filter:blur(4px)}
+  .go-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text2);font-family:var(--mono)}
+  .go-dot{width:7px;height:7px;border-radius:50%}
+  .go-dot.red{background:var(--red)}
+  .go-dot.orange{background:var(--orange)}
+  .go-dot.blue{background:var(--blue)}
+
+  /* RIGHT PANEL */
+  #right{background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+  .right-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+  .rtab{flex:1;padding:8px 6px;font-size:11px;font-family:var(--title);font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-align:center;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;transition:.15s}
+  .rtab.on{color:var(--red);border-bottom-color:var(--red)}
+  #right-content{flex:1;overflow-y:auto}
+  #right-content::-webkit-scrollbar{width:3px}
+  #right-content::-webkit-scrollbar-track{background:transparent}
+  #right-content::-webkit-scrollbar-thumb{background:var(--border2)}
+
+  /* NEWS DETAIL PANEL */
+  .detail-wrap{padding:12px}
+  .detail-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .detail-flag{font-size:20px}
+  .detail-meta{display:flex;align-items:center;gap:6px;flex:1;flex-wrap:wrap}
+  .detail-region{font-size:10px;color:var(--text3);font-family:var(--mono)}
+  .detail-time{font-size:10px;color:var(--text3);font-family:var(--mono)}
+  .detail-close{background:none;border:1px solid var(--border2);border-radius:3px;color:var(--text3);cursor:pointer;font-size:10px;padding:3px 7px;margin-left:auto;transition:.15s}
+  .detail-close:hover{border-color:var(--red);color:var(--red)}
+  .detail-title{font-size:13px;font-weight:600;line-height:1.4;color:var(--text);margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:10px}
+
+  /* SEVERITY BAR */
+  .sev-bar-wrap{margin-bottom:14px;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px}
+  .sev-bar-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .sev-bar-track{height:6px;background:var(--bg4);border-radius:3px;overflow:hidden;position:relative;margin-bottom:4px}
+  .sev-bar-fill{height:100%;border-radius:3px;transition:width 0.8s cubic-bezier(0.4,0,0.2,1)}
+  .sev-bar-zones{display:flex;justify-content:space-between;font-size:8px;color:var(--text3);font-family:var(--mono);letter-spacing:.04em}
+
+  /* DETAIL BODY */
+  .detail-body{font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:12px}
+  .detail-conf{margin-bottom:12px}
+
+  /* THREAT INDICATORS */
+  .detail-indicators{background:var(--bg3);border:1px solid var(--border);border-radius:4px;overflow:hidden}
+  .di-head{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);font-family:var(--title);font-weight:700;padding:7px 10px;border-bottom:1px solid var(--border)}
+  .di-item{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-bottom:1px solid var(--border)}
+  .di-item:last-child{border-bottom:none}
+  .di-label{font-size:11px;color:var(--text2)}
+  .di-val{font-size:9px;font-family:var(--title);font-weight:700;letter-spacing:.06em}
+
+  /* PREDICTIONS */
+  .pred-section{padding:10px 12px;border-bottom:1px solid var(--border)}
+  .ps-head{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);font-family:var(--title);font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+  .pred-item{margin-bottom:10px}
+  .pi-q{font-size:11px;color:var(--text);line-height:1.4;margin-bottom:5px}
+  .pi-bar{height:5px;background:var(--bg4);border-radius:2px;overflow:hidden;margin-bottom:3px}
+  .pi-fill{height:100%;border-radius:2px;background:var(--red)}
+  .pi-vals{display:flex;justify-content:space-between;font-size:9px;font-family:var(--mono)}
+  .pi-yes{color:var(--red)}
+  .pi-no{color:var(--text3)}
+  .pi-meta{font-size:9px;color:var(--text3);font-family:var(--mono);display:flex;gap:8px;margin-top:3px}
+
+  /* MARKETS */
+  .market-section{padding:10px 12px;border-bottom:1px solid var(--border)}
+  .ms-cat{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);font-family:var(--title);font-weight:700;margin:8px 0 4px;display:flex;align-items:center;gap:5px}
+  .ms-cat::before{content:'';display:block;width:12px;height:1px;background:var(--border2)}
+  table.mtable{width:100%;border-collapse:collapse}
+  .mtable tr{border-bottom:1px solid var(--border)}
+  .mtable tr:last-child{border-bottom:none}
+  .mtable td{padding:5px 3px;font-size:11px}
+  .mtable .mname{color:var(--text2);font-family:var(--font);min-width:70px}
+  .mtable .mval{font-family:var(--mono);text-align:right;color:var(--text)}
+  .mtable .mchg{font-family:var(--mono);text-align:right;font-size:10px;width:60px}
+  .pos{color:#4ade80}
+  .neg{color:var(--red)}
+  .mflag{font-size:11px}
+
+  /* KEYWORDS */
+  .kw-section{padding:10px 12px}
+  .kw-item{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)}
+  .kw-rank{font-size:9px;color:var(--text3);font-family:var(--mono);min-width:16px}
+  .kw-word{font-size:12px;color:var(--text);flex:1}
+  .kw-bar{flex:2;height:3px;background:var(--bg4);border-radius:2px;overflow:hidden}
+  .kw-fill{height:100%;border-radius:2px}
+  .kw-count{font-size:9px;color:var(--text3);font-family:var(--mono);white-space:nowrap}
+
+  /* SCENARIOS */
+  .scen-item{padding:10px 12px;border-bottom:1px solid var(--border)}
+  .si-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+  .si-title{font-size:12px;font-weight:500;color:var(--text)}
+  .si-prob{font-size:11px;font-family:var(--mono);color:var(--yellow)}
+  .si-body{font-size:11px;color:var(--text2);line-height:1.4}
+  .si-tags{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+  .si-tag{font-size:9px;padding:2px 5px;border:1px solid var(--border2);border-radius:2px;color:var(--text3);font-family:var(--title)}
+
+  /* BRIEFING */
+  #briefing{position:absolute;top:8px;left:8px;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:8px 12px;font-size:11px;z-index:10;display:flex;align-items:center;gap:6px;cursor:pointer;transition:.15s}
+  #briefing:hover{border-color:var(--red)}
+  .brief-icon{font-size:12px}
+  .brief-lbl{font-family:var(--title);font-weight:700;letter-spacing:.06em;font-size:12px}
+  .brief-notif{width:6px;height:6px;background:var(--red);border-radius:50%;animation:pulse 1.4s ease-in-out infinite}
+
+  /* TOOLTIP */
+  #tooltip{position:fixed;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:6px 10px;font-size:11px;pointer-events:none;z-index:200;display:none;max-width:220px}
+  .tt-title{font-weight:600;color:var(--text);margin-bottom:2px}
+  .tt-body{color:var(--text2);line-height:1.4;font-size:10px}
+  .tt-sev{margin-top:4px}
+
+  .feed-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+  .ftab-btn{flex:1;padding:6px 8px;font-size:10px;font-family:var(--title);font-weight:700;letter-spacing:.08em;text-align:center;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;transition:.15s;display:flex;align-items:center;justify-content:center;gap:4px}
+  .ftab-btn.on{color:var(--green);border-bottom-color:var(--green)}
+  .ftab-btn:hover{color:var(--text)}
+
+  ::-webkit-scrollbar{width:3px;height:3px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- TICKER -->
+<div id="ticker">
+  <div class="ticker-label">● LATEST</div>
+  <div style="overflow:hidden;flex:1">
+    <div class="ticker-track" id="ticker-track"></div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="logo">
+    <div class="logo-icon"></div>
+    Sedric Is The Best
+  </div>
+  <div class="header-stats">
+    <div class="hstat"><span class="hstat-val" id="h-active">19</span><span class="hstat-lbl">Active</span></div>
+    <div class="hstat"><span class="hstat-val" id="h-tensions">25</span><span class="hstat-lbl">Tensions</span></div>
+  </div>
+  <div class="header-nav">
+    <div class="hnav live"><span class="live-dot"></span>LIVE <span style="color:var(--text3)">160</span></div>
+    <div class="hnav" style="color:var(--text2)">LIVE VIEW</div>
+    <div class="hnav" style="color:var(--text2)">PREDICTIONS</div>
+    <div class="hnav" style="color:var(--text2)">SCENARIOS</div>
+    <div class="hnav sub">⬡ SUBSCRIBE</div>
+    <div class="hnav" style="color:var(--text2)">SIGN IN</div>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div id="layout">
+
+  <!-- LEFT PANEL -->
+  <div id="left">
+    <div class="panel-header">
+      <div class="ph-icon"></div>
+      <div class="ph-title">Pulse Feed</div>
+      <span class="ph-action" id="time-display">--:-- --</span>
+    </div>
+    <div id="filters">
+      <div class="ftag on" onclick="toggleFilter(this)">1H</div>
+      <div class="ftag" onclick="toggleFilter(this)">MEDIUM</div>
+      <div class="ftag" onclick="toggleFilter(this)">24H</div>
+      <div class="ftag" onclick="toggleFilter(this)">↑ ESCALATION</div>
+      <div class="ftag" onclick="toggleFilter(this)">↓ DE-ESCALATE</div>
+    </div>
+    <div id="search-wrap"><input type="text" placeholder="Search events..."></div>
+    <div class="feed-tabs">
+      <div class="ftab-btn on" id="ftab-live" onclick="switchFeedTab('live')"><span class="live-dot" style="width:5px;height:5px;display:inline-block;border-radius:50%;background:var(--green);margin-right:4px"></span>LIVE</div>
+      <div class="ftab-btn" id="ftab-relevant" onclick="switchFeedTab('relevant')">RELEVANT</div>
+    </div>
+    <div id="feed"></div>
+  </div>
+
+  <!-- CENTER GLOBE -->
+  <div id="center">
+    <div id="briefing">
+      <span class="brief-icon">📋</span>
+      <span class="brief-lbl">Daily Briefing</span>
+      <span class="brief-notif"></span>
+    </div>
+    <div id="cesium-globe"></div>
+    <div class="globe-overlay">
+      <div class="go-item"><div class="go-dot red"></div> Active Conflict</div>
+      <div class="go-item"><div class="go-dot orange"></div> Tension</div>
+      <div class="go-item"><div class="go-dot blue"></div> Monitor</div>
+      <span style="font-size:9px;color:var(--text3);font-family:var(--mono);margin-left:8px">26 Events · 19 Active · 25 Tensions</span>
+    </div>
+    <div id="tooltip"><div class="tt-title"></div><div class="tt-body"></div><div class="tt-sev"></div></div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div id="right">
+    <div class="right-tabs">
+      <div class="rtab on" data-tab="predictions" onclick="switchTab('predictions',this)">Predictions</div>
+      <div class="rtab" data-tab="scenarios" onclick="switchTab('scenarios',this)">Scenarios</div>
+      <div class="rtab" id="tab-detail-btn" data-tab="detail" style="display:none;color:var(--red);border-bottom:2px solid var(--red)" onclick="switchTab('detail',this)">Detail</div>
+    </div>
+    <div id="right-content">
+      <div id="tab-predictions">
+        <div class="pred-section">
+          <div class="ps-head">Top Predictions <span style="color:var(--text3)">● 5684 Total</span></div>
+          <div id="predictions-list"></div>
+        </div>
+        <div class="market-section">
+          <div class="ps-head" style="display:flex;align-items:center;gap:5px">
+            <span style="font-size:13px">📈</span> Markets
+            <span style="font-size:9px;padding:2px 6px;background:#4895ef18;color:var(--blue);border:1px solid #4895ef30;border-radius:2px;font-family:var(--title);margin-left:auto">MIXED</span>
+          </div>
+          <div class="ms-cat">Indices</div>
+          <table class="mtable" id="indices-table"></table>
+          <div class="ms-cat">Commodities</div>
+          <table class="mtable" id="commodities-table"></table>
+          <div class="ms-cat">Forex</div>
+          <table class="mtable" id="forex-table"></table>
+        </div>
+        <div class="kw-section">
+          <div class="ps-head">Top Keywords (24h)</div>
+          <div id="keywords-list"></div>
+        </div>
+      </div>
+      <div id="tab-scenarios" style="display:none">
+        <div id="scenarios-list"></div>
+      </div>
+      <div id="tab-detail" style="display:none"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="main.js"></script>
+</body>
+</html>

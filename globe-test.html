@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cesium Globe Test — Photorealistic Tiles</title>
+
+<!-- Cesium itself (same CDN approach as Milestone 1's flat-sphere test) -->
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js"></script>
+<link href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+
+<!-- This defines window.CESIUM_TOKEN. Confirmed via `dir` that it actually
+     lives right here in cesium-globe-test/, next to this file — not at the
+     repo root as originally assumed. -->
+<script src="config.local.js"></script>
+
+<style>
+  html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; background:#0a0a0b; }
+  #status {
+    position:fixed; top:8px; left:8px; z-index:999;
+    background:#111; color:#9999aa; font-family:'Share Tech Mono',monospace;
+    font-size:12px; padding:6px 10px; border-radius:4px; border:1px solid #2a2a35;
+  }
+</style>
+</head>
+<body>
+
+<div id="status">Loading photorealistic tiles…</div>
+<div id="cesiumContainer"></div>
+
+<script>
+  // Same ion token Milestone 1 already confirmed works.
+  Cesium.Ion.defaultAccessToken = window.CESIUM_TOKEN;
+
+  const viewer = new Cesium.Viewer('cesiumContainer', {
+    baseLayerPicker: false,
+    // Cesium.IonGeocodeProviderType (which would let us formally declare
+    // "use Google's geocoder") doesn't exist in this Cesium version — it
+    // was added later than 1.120. Disabling the geocoder widget entirely
+    // avoids needing it. This may print a one-time compliance warning to
+    // the console about Google's geocoder requirement — that's harmless,
+    // just a notice, not an error.
+    geocoder: false,
+    homeButton: false,
+    sceneModePicker: false,
+    navigationHelpButton: false,
+    animation: false,
+    timeline: false,
+    fullscreenButton: false,
+    infoBox: false,
+    selectionIndicator: false,
+  });
+
+  const statusEl = document.getElementById('status');
+
+  async function loadPhotorealisticTileset() {
+    try {
+      // No arguments here on purpose. On this Cesium version the function's
+      // first argument is a plain Google-Maps API-key *string* (defaulting
+      // to GoogleMaps.defaultApiKey, which we haven't set) — not an options
+      // object. Passing {onlyUsingWithGoogleGeocoder:true} was being treated
+      // as that key and stringified straight into the tile request URL as
+      // "[object Object]", which is exactly the 404/400 you saw. Leaving it
+      // out lets it fall back to routing through the ion token correctly.
+      const tileset = await Cesium.createGooglePhotorealistic3DTileset();
+
+      viewer.scene.primitives.add(tileset);
+      viewer.scene.globe.show = false; // hide the flat globe now that real tiles are in
+
+      statusEl.textContent = 'Photorealistic tiles loaded (via ion token)';
+      statusEl.style.color = '#2ec4b6';
+    } catch (err) {
+      // If this fires, check the Electron devtools console for the real
+      // error — most likely causes: token missing/invalid, or token doesn't
+      // have the "Google Photorealistic 3D Tiles" asset enabled in the ion
+      // account dashboard.
+      console.error('Photorealistic tileset failed to load:', err);
+      statusEl.textContent = 'FAILED — falling back to flat globe. Check console (Ctrl+Shift+I) for the error.';
+      statusEl.style.color = '#e63946';
+      viewer.scene.globe.show = true;
+    }
+  }
+
+  loadPhotorealisticTileset();
+
+  // Start zoomed out over the globe so it's obvious at a glance whether the
+  // real tileset (visibly textured, photorealistic) or the fallback
+  // (flat grey/OSM) is showing.
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(0, 20, 20000000)
+  });
+</script>
+
+</body>
+</html>

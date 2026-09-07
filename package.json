@@ -1,0 +1,36 @@
+{
+  "name": "sedric-intel",
+  "version": "1.0.0",
+  "description": "Sedric Is The Best — Global Threat Intelligence Dashboard",
+  "main": "electron-main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.sedric.intel",
+    "productName": "Sedric Is The Best",
+    "files": [
+      "index.html",
+      "main.js",
+      "electron-main.js",
+      "preload.js",
+      "cesium-globe-test/config.local.js"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
